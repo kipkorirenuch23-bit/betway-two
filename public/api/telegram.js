@@ -1,5 +1,6 @@
 export default async function handler(req, res) {
 
+  // Only accept POST requests
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,
@@ -8,8 +9,10 @@ export default async function handler(req, res) {
   }
 
   try {
+
     const { phone, message } = req.body || {};
 
+    // Validate incoming information
     if (
       typeof phone !== "string" ||
       typeof message !== "string" ||
@@ -19,20 +22,30 @@ export default async function handler(req, res) {
     ) {
       return res.status(400).json({
         success: false,
-        error: "Invalid phone number or message"
+        error: "Invalid phone number or message."
       });
     }
 
+    // Read private Vercel environment variables
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
 
     if (!token || !chatId) {
+      console.error("Telegram environment variables missing.");
+
       return res.status(500).json({
         success: false,
-        error: "Telegram settings are missing"
+        error: "Telegram configuration is missing."
       });
     }
 
+    // Prepare Telegram notification
+    const telegramMessage =
+      "NEW WEBSITE MESSAGE\n\n" +
+      "Phone Number: " + phone.trim() +
+      "\n\nMessage:\n" + message.trim();
+
+    // Send to Telegram
     const telegramResponse = await fetch(
       `https://api.telegram.org/bot${token}/sendMessage`,
       {
@@ -42,36 +55,39 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           chat_id: chatId,
-          text:
-            "NEW WEBSITE MESSAGE\n\n" +
-            "Phone: " + phone.trim() +
-            "\n\nMessage:\n" + message.trim()
-        })
+          text: telegramMessage
+        }),
+        signal: AbortSignal.timeout(15000)
       }
     );
 
     const result = await telegramResponse.json();
 
     if (!telegramResponse.ok || !result.ok) {
-      console.error("Telegram error:", result);
+
+      console.error("Telegram API error:", result);
 
       return res.status(502).json({
         success: false,
-        error: "Telegram could not deliver the message"
+        error: "Telegram failed to deliver your message."
       });
     }
 
+    // Confirm successful Telegram delivery
     return res.status(200).json({
-      success: true
+      success: true,
+      message: "Message delivered successfully."
     });
 
   } catch (error) {
 
-    console.error("Server error:", error);
+    console.error("Function error:", error);
 
     return res.status(500).json({
       success: false,
-      error: "Internal server error"
+      error: "Server error. Please try again."
     });
+
   }
+
 }
